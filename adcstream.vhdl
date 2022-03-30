@@ -40,6 +40,7 @@ architecture Behavioral of adcstream is
 signal   update_cnt          : std_logic_vector(31 downto 0) := x"00000000";
 signal   update_strobe       : std_logic := '0';
 signal   acq_strobe          : std_logic := '0';
+signal   dump_strobe         : std_logic := '0';
 signal   acq_counter         : std_logic_vector(15 downto 0) := x"0001";
 signal   halt_acq            : std_logic := '0';
 signal   skip_acq            : std_logic := '0';
@@ -124,15 +125,14 @@ sram0: component ram16kb
     );
 command_valid <= '1';
 command_startofpacket <= '1';
-testout(7 downto 0) <= adc_sram_addr(7 downto 0);
+testout(7 downto 0) <= post_trigger_cnt(7 downto 0);
 
 --transmit state machine
 header <= x"20";
 process(clk_50mhz)
 begin
    if clk_50mhz'event and clk_50mhz='1' then
-      if acq_strobe = '1' then acq_strobe <= '0'; end if;    
-      if update_strobe = '1' then 
+      if dump_strobe = '1' then 
          dump <= '1'; 
          tx_ena <= x"0"; 
          txdelay <= x"0000"; 
@@ -174,7 +174,6 @@ begin
                sample_addr <= sample_addr + '1';
             elsif sample_addr >= osc_length + header then  -- end of packet
                dump <= '0';
-               acq_strobe <= '1';
                sample_addr <= x"0000";               
             end if;
          end if;
@@ -182,10 +181,11 @@ begin
    end if;
 end process;
 
-tempaddr(15 downto 1) <= trigger_addr(14 downto 0) - trigger_offset(14 downto 0);
+tempaddr(15 downto 1) <= trigger_addr(14 downto 0) - trigger_offset(14 downto 0) when trigger = '1' else x"0000";
 tempaddr(0) <= '0';
-sample_addr_trigoff <= (sample_addr - header) when trigger_addr = x"0000"
-          else (sample_addr - header) + tempaddr;
+sample_addr_trigoff <= (sample_addr - header) + tempaddr;
+--sample_addr_trigoff <= (sample_addr - header) when trigger = '0' else 
+--                       (sample_addr - header) + tempaddr;
 
 process(clk_50mhz)
 begin
@@ -200,15 +200,16 @@ begin
    end if;
 end process;
 
---adc acquire state machine-list of channels in two places
 response_ch <= "00" when response_channel = "01000" else
                "01" when response_channel = "00010" else
                "10" when response_channel = "00101" else
                "11" when response_channel = "00001";
                
+--adc acquire state machine-list of channels in two places
 process(clk_50mhz)
 begin
    if clk_50mhz'event and clk_50mhz='1' then
+      if dump_strobe = '1' then dump_strobe <= '0'; end if;
       if acq_counter < acq_rate and response_valid = '1' then 
          acq_counter <= acq_counter + '1';
       end if;
@@ -217,7 +218,7 @@ begin
       if ram_write_delay <= "0111" then ram_write_delay <= ram_write_delay + '1'; end if; 
       if ram_write_delay(3) = '1' then ram_write_delay <= x"0"; end if;
       --reset everything
-      if acq_strobe = '1' then 
+      if update_strobe = '1' then 
          adc_sram_addr <= x"0000";
          trigger_addr <= x"0000";    
          post_trigger_cnt <= x"0000";
@@ -250,12 +251,8 @@ begin
          else
             adc_sram_addr <= adc_sram_addr + '1';
          end if;
-         --once triggered count acq cycles
-         if trigger_addr > x"0000" then post_trigger_cnt <= post_trigger_cnt + '1'; end if;
-         --stop acq once enought samples taken
-         if trigger = '1' and post_trigger_cnt > osc_length then halt_acq <= '1'; end if;
-         if trigger = '0' and adc_sram_addr > osc_length then halt_acq <= '1'; end if;
-         --if adc_sram_addr > trigger_offset then buffered <= '1'; end if;
+         if trigger = '0' or trigger_addr > x"0000" then post_trigger_cnt <= post_trigger_cnt + '1'; end if;
+         if post_trigger_cnt > osc_length then dump_strobe <= '1'; halt_acq <= '1'; end if;
          if (channel_cnt_last = x"0" or activech = x"1") then adc_last <= response_data; end if;
 			-- store last 4 logic levels
 			if response_ch = "00" then
@@ -264,8 +261,7 @@ begin
 			end if;
          -- if trigger set and first time thru and trif offset padded and adc meas goes <1v to >= 1v
          if trigger = '1' and trigger_addr = x"0000"          --trigger active and not set
-                          --and adc_sram_addr > trigger_offset  --dont trigger unless previuos data buffered
-                          --and '0'&response_data > '0'&x"400" and '0'&adc_last <= '0'&x"400" --rising edge
+                          and adc_sram_addr > trigger_offset  --dont trigger unless previuos data buffered
                           and resp_val_high = "0011"
 								  and response_ch = "00" then         -- and channel 0
                                    trigger_addr <= adc_sram_addr;    
