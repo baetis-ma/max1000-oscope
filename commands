@@ -1,0 +1,16 @@
+to run gui
+/home/mark/intelFPGA_lite/21.1/quartus/bin/quartus --64bit oscope.qpf
+some ubuntu libs not checked out work around
+ssh -Y localhost /home/mark/intelFPGA_lite/20.1/quartus/bin/quartus --64bit ~/Desktop/max1000-oscope/oscope.qpf
+
+to compile
+quartus_sh --flow compile oscope
+
+~/intelFPGA_lite/21.1/nios2eds/nios2_command_shell.sh
+quartus_pgm --auto
+quartus_pgm -m jtag -o "p;/home/mark/Desktop/max1000-oscope/output_files/oscope.sof"
+quartus_pgm -m jtag -o "p;/home/mark/Desktop/max1000-oscope/output_files/oscope.pof"
+
+grep ' PIN_' oscope.qsf | sed 's/^.*PIN_//g'
+grep VHDL oscope.qsf | sed 's/^.*VHDL_FILE//g' 
+grep IO_STANDARD oscope.qsf | sed 's/^.*IO_STANDARD//g' 
