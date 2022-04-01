@@ -87,6 +87,8 @@ component adcstream is
            rx                     : in     std_logic;
            osc_length             : in     std_logic_vector(15 downto 0);
            trigger_offset         : in     std_logic_vector(15 downto 0);
+           trig_ch                : in     std_logic_vector(1 downto 0);
+           trig_pol               : in     std_logic;
            acq_rate               : in     std_logic_vector(15 downto 0) := x"0001";
            activech               : in     std_logic_vector(3 downto 0) := x"1";
            trigger                : in     std_logic;
@@ -157,6 +159,8 @@ adcstream0: component adcstream
            trigger_offset         => trigger_offset,
            activech               => adc_control(3 downto 0),
            trigger                => adc_control(15),
+           trig_ch                => adc_control(14 downto 13),
+           trig_pol               => adc_control(12),
            command_valid          => command_valid,      
            command_channel        => command_channel,     
            command_startofpacket  => command_startofpacket,

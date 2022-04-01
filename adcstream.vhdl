@@ -18,6 +18,8 @@ entity adcstream is
            trigger_offset         : in     std_logic_vector(15 downto 0);
            activech               : in     std_logic_vector(3 downto 0);
            trigger                : in     std_logic;
+           trig_ch                : in     std_logic_vector(1 downto 0);
+           trig_pol               : in     std_logic;
            response_valid         : in     std_logic;       
            response_channel       : in     std_logic_vector(4 downto 0);
            response_data          : in     std_logic_vector(11 downto 0);
@@ -154,7 +156,7 @@ begin
                if sample_addr = x"0005" then tx_data <= x"6f"; end if;
                if sample_addr = x"0006" then tx_data <= x"70"; end if;
                if sample_addr = x"0007" then tx_data <= x"65"; end if;
-               if sample_addr = x"0008" then tx_data <= trigger & "000" & activech; end if;
+               if sample_addr = x"0008" then tx_data <= trigger & trig_ch & trig_pol & activech; end if;
                if sample_addr = x"0009" then tx_data <= osc_length(15 downto 8); end if;
                if sample_addr = x"000a" then tx_data <= osc_length(7 downto 0); end if;
                if sample_addr = x"000b" then tx_data <= acq_rate(15 downto 8); end if;
@@ -181,7 +183,8 @@ begin
    end if;
 end process;
 
-tempaddr(15 downto 1) <= trigger_addr(14 downto 0) - trigger_offset(14 downto 0) when trigger = '1' else x"0000";
+tempaddr(15 downto 1) <= trigger_addr(14 downto 0) - trigger_offset(14 downto 0) when trigger = '1' 
+                         else "000000000000000";
 tempaddr(0) <= '0';
 sample_addr_trigoff <= (sample_addr - header) + tempaddr;
 --sample_addr_trigoff <= (sample_addr - header) when trigger = '0' else 
@@ -255,15 +258,15 @@ begin
          if post_trigger_cnt > osc_length then dump_strobe <= '1'; halt_acq <= '1'; end if;
          if (channel_cnt_last = x"0" or activech = x"1") then adc_last <= response_data; end if;
 			-- store last 4 logic levels
-			if response_ch = "00" then
+			if trig_ch = response_ch then
 	         if '0'&response_data > '0'&x"400" then resp_val_high <= resp_val_high(2 downto 0) & '1'; 
 				   else resp_val_high <= resp_val_high(2 downto 0) & '0'; end if;
 			end if;
          -- if trigger set and first time thru and trif offset padded and adc meas goes <1v to >= 1v
          if trigger = '1' and trigger_addr = x"0000"          --trigger active and not set
                           and adc_sram_addr > trigger_offset  --dont trigger unless previuos data buffered
-                          and resp_val_high = "0011"
-								  and response_ch = "00" then         -- and channel 0
+                          and ((trig_pol = '1' and resp_val_high = "0011") or (trig_pol = '0' and resp_val_high = "1100"))
+								  and trig_ch = response_ch then         -- and channel 0
                                    trigger_addr <= adc_sram_addr;    
          end if;
       end if;
