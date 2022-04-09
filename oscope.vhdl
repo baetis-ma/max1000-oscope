@@ -1,4 +1,3 @@
-
 LIBRARY ieee;
 USE ieee.std_logic_1164.all;
 USE ieee.std_logic_unsigned.all;
@@ -46,13 +45,14 @@ signal regaddr                : std_logic_vector(7 downto 0);
 signal regdataout             : std_logic_vector(15 downto 0);
 signal regdatain              : std_logic_vector(15 downto 0);
 signal regstrobe              : std_logic;
-signal regdata00              : std_logic_vector(15 downto 0) := x"0002";
-signal regdata01              : std_logic_vector(15 downto 0) := x"0400";
+signal regdata00              : std_logic_vector(15 downto 0) := x"0fff";
+signal regdata01              : std_logic_vector(15 downto 0) := x"05c0";
 signal updaterate             : std_logic_vector(15 downto 0) := x"0400";  
 signal pwm_rate               : std_logic_vector(15 downto 0) := x"061a";  --0x90
 signal pwm_counter            : std_logic_vector(23 downto 0) := x"000000";
 signal pwm_lucnt              : std_logic_vector(19 downto 0) := x"00000";
 signal pwm_cycle              : std_logic_vector(15 downto 0) := x"001f";  --0x91
+signal shiftcnt               : integer range 0 to 32 := 0;
 signal pwm_luval              : std_logic_vector(8 downto 0);
 signal pwm                    : std_logic;
 signal counter_1msec          : std_logic_vector(15 downto 0);
@@ -205,7 +205,7 @@ led(5 downto 0) <= testoutadc(7 downto 2);
 pwm_out(0) <= pwm;
 pwm_out(1) <= pwm;
 pwm_out(2) <= '1' when timer(7 downto 0) = x"00" else '0';
-pwm_out(3) <= not pwm;
+pwm_out(3) <= timer(0);
  
 regdataout <= regdata00             when regaddr = x"00" else
               regdata01             when regaddr = x"01" else
@@ -267,10 +267,15 @@ process (clk_200mhz)
 begin
    if clk_200mhz'event and clk_200mhz = '1' then
       if pwm_rate(15) = '0' then
-         if pwm_counter(23 downto 7) > pwm_rate then pwm_counter <= x"000000"; 
-            else pwm_counter <= pwm_counter + '1'; end if;
-         if pwm_cycle > pwm_counter(23 downto 7) then pwm <= '1'; else pwm <= '0'; end if;
+         if pwm_counter(23 downto 7) > pwm_rate then 
+            pwm_counter <= x"000000"; 
+            if (shiftcnt < 16) then shiftcnt <= 0; else shiftcnt <= shiftcnt + 1; end if;
+         else pwm_counter <= pwm_counter + '1'; end if;
+         if pwm_counter(23 downto 7) > pwm_cycle and
+            pwm_counter(23 downto 7) < (pwm_rate - pwm_cycle) then
+            pwm <= '1'; else pwm <= '0'; end if;
       end if;
+
       if pwm_rate(15) = '1' then
          pwm_counter <= pwm_counter + '1';
          if pwm_counter > x"0000ff" then 
