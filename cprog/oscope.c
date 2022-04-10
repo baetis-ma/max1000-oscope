@@ -42,7 +42,8 @@ void menu(int fd)
          fprintf(stderr, "\n");
          if (ftemp < .005 || ftemp > 1000 || ftemp1 <0 || ftemp1 > 1) fprintf(stderr, "not valid samples\n"); 
          else { r90 = -1 + (int)((200000/128)*ftemp);
-                r91 = (int)(ftemp1*r90);
+                r91 = (int)(ftemp1*r90/2);
+fprintf(stderr,"r90 = 0x%04x r91 = 0x%04x\n", r90, r91);
                 sprintf(tout, "w 90 %04x", r90);    
                 tout[strlen(tout)] = '\x0d';
                 tout[strlen(tout)] = '\0';
@@ -138,7 +139,7 @@ void menu(int fd)
       }
       if( temp == 'S' || temp == 'x' || temp == 'c' || temp == 'o'){ 
                 r50 = 2 * samples * chcnt;
-                r51 = trigger*0x8000 + chcnt;
+                r51 = trigger*0x8000 + 0x2000 * trig_ch + 0x1000 * trig_pol + chcnt;
                 r52 = (int)(1000*ftime/(chcnt*samples));
                 r53 = (int) chcnt * (foff * samples);
                   //fprintf(stderr, "r53 = 0x%04x  %d\n",r53,r53);
@@ -223,12 +224,11 @@ void main()
      if (byte[0] == 'e' && cnt == 5 && strobe == 3) {cnt = 0; strobe = 4; cntstart = 0; }
      if (strobe == 4) {
         while(strobe == 4 && read(fd,byte,1)!= 0)  {
-           //if(cnt<50)printf("%4d  byte[0]=0x%02x %c  cnt=%d  strobe=%d\n",cnt, byte[0],byte[0],cnt, strobe);
            menu(fd);
            cnt = cnt + 1;
            if (cnt == 1) {trigger = byte[0]/128; 
-                          //trig_ch = (byte[0]%128)/32; 
-                          //trig_pol = (byte[0]%32)/16; 
+                          trig_ch = (byte[0]%128)/32; 
+                          trig_pol = (byte[0]%32)/16; 
                           chcnt = byte[0]%8; }
            if (cnt == 2) length = 256*byte[0];
            if (cnt == 3) length = length + byte[0];
@@ -238,59 +238,53 @@ void main()
            if (cnt == 7) trigoff = trigoff + byte[0];
            //if (cnt == 7) fprintf(stderr,"triggeroffset = %d\n", trigoff);
            if(cnt==header){printf("set yrange[-0.5:%d]\n",4+off*4*(chcnt-1));
-                       realxaxis = 0.001*(float)chcnt*timeus*samples;  
-                       printf("set xrange[0:%f]\n",0.001*(float)chcnt*timeus*samples);  
-                       //printf("set xrange[0:%f]\n",ftime);  
-                       printf("unset label 1\n");  
-                       if (trigger == 1 & foff < 0) 
-                            printf("set label 1 \"<-\" font \",12\" at %f,-.75 center tc rgb \'red\'\n",0.00);  
-                       if (trigger == 1 & foff > 1) 
-                            printf("set label 1 \"->\" font \",12\" at %f,-.75 center tc rgb \'red\'\n",realxaxis);  
-                       if (trigger == 1 & foff >= 0 & foff <= 1) 
-                            printf("set label 1 \"*\" font \",20\" at %f,-.75 center tc rgb \'red\'\n",foff*realxaxis);  
-                       printf("set xlabel \"time (ms) - %dus/ samp %d samples/channel\"\n",
-                                                chcnt*timeus,samples);
-                       printf("set style line 1 lw 1.5 pt 7 ps .5 lc rgb \'salmon\'\n");
-                       printf("set style line 2 lw 1.5 pt 7 ps .5 lc rgb \'sandybrown\'\n");
-                       printf("set style line 3 lw 1.5 pt 7 ps .5 lc rgb \'light-red\'\n");
-                       printf("set style line 4 lw 1.5 pt 7 ps .5 lc rgb \'yellow\'\n");
-                       printf("array xa[4100]\n");
-                       printf("array y1a[4100]\n"); printf("array y2a[4100]\n");
-                       printf("array y3a[4100]\n"); printf("array y4a[4100]\n"); }
-
-        volttemp = 0;
-        if(cnt>header) {
-      //sync data embedded in adc data bit7 = 1 for 7 lsb bits, other byte contains chan# in bits 5 and 6
-           if(byte[0] / 0x80 == 1) volttemp = byte[0]%0x80; 
-         else  { volti[byte[0]/32] = volttemp + 128 * (byte[0]%32); 
-       //  printf(" %5d %5d %5d\n", byte[0], byte[0]/32, byte[0]%32); 
-         }
-         if (1) {
-           if(chcnt == 1 && byte[0]/32 == 0){
-             printf("xa[%d]  = %6.3f; ", 1+(cnt-header)/2, 0.001*timeus*(cnt-header)/2);
-             printf("y1a[%d] = %6.3f\n", 1+(cnt-header)/2, 3.3/4096*(float)volti[0]); 
-             }
-           if(chcnt == 2 && byte[0]/32 == 1){
-             printf("xa[%d]  = %6.3f; ", 1+(cnt-header)/4, 0.001*timeus*(cnt-header)/2);
-             printf("y1a[%d] = %6.3f; ", 1+(cnt-header)/4, 0*off+3.3/4096*(float)volti[0]);
-             printf("y2a[%d] = %6.3f\n", 1+(cnt-header)/4, 4*off+3.3/4096*(float)volti[1]); 
-             }
-           if(chcnt == 3 && byte[0]/32 == 2){
-             printf("xa[%d]  = %6.3f; ", 1+(cnt-header)/6, 0.001*timeus*(cnt-header)/2);
-             printf("y1a[%d] = %6.3f; ", 1+(cnt-header)/6, 0*off+3.3/4096*(float)volti[0]);
-             printf("y2a[%d] = %6.3f; ", 1+(cnt-header)/6, 4*off+3.3/4096*(float)volti[1]);
-             printf("y3a[%d] = %6.3f\n", 1+(cnt-header)/6, 8*off+3.3/4096*(float)volti[2]);
-             }
-           if(chcnt == 4 && byte[0]/32 == 3){
-             printf("xa[%d]  = %6.3f; ", 1+(cnt-header)/8, 0.001*timeus*(cnt-header)/2);
-             printf("y1a[%d] = %6.3f; ", 1+(cnt-header)/8, 0*off+3.3/4096*(float)volti[0]);
-             printf("y2a[%d] = %6.3f; ", 1+(cnt-header)/8, 4*off+3.3/4096*(float)volti[1]);
-             printf("y3a[%d] = %6.3f; ", 1+(cnt-header)/8, 8*off+3.3/4096*(float)volti[2]); 
-             printf("y4a[%d] = %6.3f\n", 1+(cnt-header)/8,12*off+3.3/4096*(float)volti[3]);
-             }
-          }
+              realxaxis = 0.001*(float)chcnt*timeus*samples;  
+              printf("set xrange[0:%f]\n",0.001*(float)chcnt*timeus*samples);  
+              printf("unset label 1\n");  
+              if (trigger == 1 & foff < 0) 
+                   printf("set label 1 \"<-\" font \",12\" at %f,-.75 center tc rgb \'red\'\n",0.00);  
+              if (trigger == 1 & foff > 1) 
+                   printf("set label 1 \"->\" font \",12\" at %f,-.75 center tc rgb \'red\'\n",realxaxis);  
+              if (trigger == 1 & foff >= 0 & foff <= 1) 
+                   printf("set label 1 \"*\" font \",20\" at %f,-.75 center tc rgb \'red\'\n",foff*realxaxis);  
+              printf("set xlabel \"time (ms) - %dus/ samp %d samples/channel\"\n",
+                                       chcnt*timeus,samples);
+              printf("set style line 1 lw 1.5 pt 7 ps .5 lc rgb \'salmon\'\n");
+              printf("set style line 2 lw 1.5 pt 7 ps .5 lc rgb \'sandybrown\'\n");
+              printf("set style line 3 lw 1.5 pt 7 ps .5 lc rgb \'light-red\'\n");
+              printf("set style line 4 lw 1.5 pt 7 ps .5 lc rgb \'yellow\'\n");
+              printf("array xa[4100]\n");
+              printf("array y1a[4100]\n"); printf("array y2a[4100]\n");
+              printf("array y3a[4100]\n"); printf("array y4a[4100]\n"); 
+           }
+           volttemp = 0;
+           if(cnt>header) { if(byte[0] / 0x80 == 1) volttemp = byte[0]%0x80; else  { volti[byte[0]/32] = volttemp + 128 * (byte[0]%32); }
+              if(chcnt == 1 && byte[0]/32 == 0){
+                 printf("xa[%d]  = %6.3f; ", 1+(cnt-header)/2, 0.001*timeus*(cnt-header)/2);
+                 printf("y1a[%d] = %6.3f\n", 1+(cnt-header)/2, 3.3/4096*(float)volti[0]); 
+               }
+               if(chcnt == 2 && byte[0]/32 == 1){
+                  printf("xa[%d]  = %6.3f; ", 1+(cnt-header)/4, 0.001*timeus*(cnt-header)/2);
+                  printf("y1a[%d] = %6.3f; ", 1+(cnt-header)/4, 0*off+3.3/4096*(float)volti[0]);
+                  printf("y2a[%d] = %6.3f\n", 1+(cnt-header)/4, 4*off+3.3/4096*(float)volti[1]); 
+               }
+               if(chcnt == 3 && byte[0]/32 == 2){
+                  printf("xa[%d]  = %6.3f; ", 1+(cnt-header)/6, 0.001*timeus*(cnt-header)/2);
+                  printf("y1a[%d] = %6.3f; ", 1+(cnt-header)/6, 0*off+3.3/4096*(float)volti[0]);
+                  printf("y2a[%d] = %6.3f; ", 1+(cnt-header)/6, 4*off+3.3/4096*(float)volti[1]);
+                  printf("y3a[%d] = %6.3f\n", 1+(cnt-header)/6, 8*off+3.3/4096*(float)volti[2]);
+               }
+               if(chcnt == 4 && byte[0]/32 == 3){
+                  printf("xa[%d]  = %6.3f; ", 1+(cnt-header)/8, 0.001*timeus*(cnt-header)/2);
+                  printf("y1a[%d] = %6.3f; ", 1+(cnt-header)/8, 0*off+3.3/4096*(float)volti[0]);
+                  printf("y2a[%d] = %6.3f; ", 1+(cnt-header)/8, 4*off+3.3/4096*(float)volti[1]);
+                  printf("y3a[%d] = %6.3f; ", 1+(cnt-header)/8, 8*off+3.3/4096*(float)volti[2]); 
+                  printf("y4a[%d] = %6.3f\n", 1+(cnt-header)/8,12*off+3.3/4096*(float)volti[3]);
+              }
+           }
         }
-        if (cnt-header> length ) { 
+        //if ((cnt-header) == length ) { 
+        if (1 ) { 
            if(chcnt == 1) {
               printf("plot xa u 2:(y1a[$1]) title 'ch0' w linespoints ls 1\n");
            }
@@ -309,12 +303,10 @@ void main()
               printf(" xa u 2:(y3a[$1]) title 'ch2' w linespoints ls 3, \\\n");
               printf(" xa u 2:(y4a[$1]) title 'ch3' w linespoints ls 4\n");
            }
-           cnt = 0; strobe = 0;}
+           cnt = 0; strobe = 0;
         }
         fflush(stdout);
      }
   }
   changemode(0);
 }
-
-
